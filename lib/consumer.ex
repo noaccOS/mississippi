@@ -19,6 +19,10 @@ defmodule Mississippi.Consumer do
     Supervisor.start_link(__MODULE__, init_opts, name: __MODULE__)
   end
 
+  def aaa do
+    Mississippi.Consumer.ConsumersSupervisor.start_link(queues: [total_count: 10])
+  end
+
   @impl true
   def init(init_opts) do
     opts = NimbleOptions.validate!(init_opts, Options.definition())

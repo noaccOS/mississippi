@@ -18,15 +18,22 @@ defmodule Mississippi.Consumer.AMQPDataConsumer.Supervisor do
   end
 
   @impl true
-  def init(_init_arg) do
-    DynamicSupervisor.init(
-      members: :auto,
-      strategy: :one_for_one,
-      process_redistribution: :active
-    )
+  def init(init_arg) do
+    with {:ok, result} <- DynamicSupervisor.init(strategy: :one_for_one, process_redistribution: :active) do
+      init_arg
+      |> Keyword.get(:queues_config, [])
+      |> start_children()
+
+            AMQPDataConsumer.Supervisor |> DynamicSupervisor.which_children() |> Enum.count()
+            |> dbg()
+
+
+      {:ok, result}
+    end
+    
   end
 
-  def start_children(queues_config) do
+  defp start_children(queues_config) do
     children = amqp_data_consumers_childspecs(queues_config)
 
     Enum.each(children, fn child ->
@@ -35,6 +42,7 @@ defmodule Mississippi.Consumer.AMQPDataConsumer.Supervisor do
   end
 
   defp amqp_data_consumers_childspecs(queues_config) do
+    dbg(queues_config)
     queue_total = queues_config[:total_count]
     queue_prefix = queues_config[:prefix]
 

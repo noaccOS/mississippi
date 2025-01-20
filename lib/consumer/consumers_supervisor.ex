@@ -25,22 +25,30 @@ defmodule Mississippi.Consumer.ConsumersSupervisor do
 
     queues_config = init_arg[:queues]
 
+    horde_processes = [
+      DataUpdater.Registry,
+      MessageTracker.Registry,
+      AMQPDataConsumer.Registry,
+      DataUpdater.Supervisor,
+      MessageTracker.Supervisor,
+      AMQPDataConsumer.Supervisor
+    ]
+
     children = [
-      {Registry, [keys: :unique, name: DataUpdater.Registry, members: :auto]},
-      {Registry, [keys: :unique, name: MessageTracker.Registry, members: :auto]},
-      {Registry, [keys: :unique, name: AMQPDataConsumer.Registry, members: :auto]},
+      {Registry, [keys: :unique, name: DataUpdater.Registry]},
+      {Registry, [keys: :unique, name: MessageTracker.Registry]},
+      {Registry, [keys: :unique, name: AMQPDataConsumer.Registry]},
       {DataUpdater.Supervisor, message_handler: message_handler},
       {DynamicSupervisor,
        strategy: :one_for_one,
        name: MessageTracker.Supervisor,
-       members: :auto,
        process_redistribution: :active,
        distribution_strategy: Horde.UniformQuorumDistribution},
       {AMQPDataConsumer.Supervisor, queues_config: queues_config},
       # This will make queue listeners start after re-sharding in a multi-node cluster
-      {NodeListener, queues_config},
+      {NodeListener, processes: horde_processes, queues_config: queues_config}
       # This will make queue listeners start in a single-node cluster
-      {AMQPDataConsumer.Starter, queues_config}
+      # {AMQPDataConsumer.Starter, queues_config}
     ]
 
     opts = [strategy: :rest_for_one]

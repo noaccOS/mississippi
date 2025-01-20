@@ -23,7 +23,7 @@ defmodule Mississippi.Consumer.AMQPDataConsumer.Starter do
   end
 
   defp start_consumers(args, retry) do
-    AMQPDataConsumer.Supervisor.start_children(args)
+    # AMQPDataConsumer.Supervisor.start_children(args)
 
     queue_total = args[:total_count]
 
