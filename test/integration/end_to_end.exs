@@ -45,7 +45,8 @@ defmodule Mississippi.EndToEnd.Test do
 
     %{
       producer: start_supervised!({Mississippi.Producer, producer_options}),
-      consumer: start_supervised!({Mississippi.Consumer, consumer_options})
+      consumer: start_supervised!({Mississippi.Consumer, consumer_options}),
+      mississippi_config: producer_options[:mississippi_config]
     }
   end
 
@@ -63,9 +64,10 @@ defmodule Mississippi.EndToEnd.Test do
   test "Message is published and received", %{
     sharding_key: sharding_key,
     payload: payload,
-    timestamp: timestamp
+    timestamp: timestamp,
+    mississippi_config: mississippi_config
   } do
-    EventsProducer.publish(payload, sharding_key: sharding_key)
+    EventsProducer.publish(payload, [sharding_key: sharding_key], mississippi_config)
 
     assert_receive {^payload, headers, ^timestamp}
     assert :erlang.binary_to_term(headers["sharding_key"]) == sharding_key
