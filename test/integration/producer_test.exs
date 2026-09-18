@@ -5,13 +5,14 @@ defmodule Mississippi.Integration.Producer.Test do
   use ExUnit.Case
 
   alias Mississippi.Producer.EventsProducer
+  alias Mississippi.Producer.EventsProducer.Worker
 
   require Logger
 
   @moduletag :integration
 
   setup_all do
-    queue_count = System.unique_integer([:positive])
+    queue_count = :rand.uniform(128)
     prefix = "mississippi_test_#{System.unique_integer()}_"
     exchange_name = "mississippi_#{System.unique_integer([:positive])}"
 
@@ -22,11 +23,14 @@ defmodule Mississippi.Integration.Producer.Test do
       ]
     ]
 
+    start_supervised!({Mississippi.Producer, producer_options})
+    event_producer_pids(queue_count)
+
     %{
-      producer: start_supervised!({Mississippi.Producer, producer_options}),
       exchange_name: exchange_name,
       queue_count: queue_count,
-      queue_prefix: prefix
+      queue_prefix: prefix,
+      mississippi_config: producer_options[:mississippi_config]
     }
   end
 
@@ -39,9 +43,10 @@ defmodule Mississippi.Integration.Producer.Test do
     @tag :producer_message_sharding
     test "Message is published on the correct queue according to the sharding key", %{
       sharding_key: sharding_key,
-      payload: payload
+      payload: payload,
+      mississippi_config: mississippi_config
     } do
-      EventsProducer.publish(payload, sharding_key: sharding_key)
+      EventsProducer.publish(payload, [sharding_key: sharding_key], mississippi_config)
 
       assert_receive {^payload, headers, _timestamp}
       assert :erlang.binary_to_term(headers["sharding_key"]) == sharding_key
@@ -56,9 +61,10 @@ defmodule Mississippi.Integration.Producer.Test do
     @tag :producer_message_options
     test "Timestamp is added to the message if missing", %{
       sharding_key: sharding_key,
-      payload: payload
+      payload: payload,
+      mississippi_config: mississippi_config
     } do
-      EventsProducer.publish(payload, sharding_key: sharding_key)
+      EventsProducer.publish(payload, [sharding_key: sharding_key], mississippi_config)
 
       assert_receive {^payload, _headers, timestamp}
       assert timestamp
@@ -67,10 +73,16 @@ defmodule Mississippi.Integration.Producer.Test do
     @tag :producer_message_options
     test "Timestamp is correctly included in the message if present", %{
       sharding_key: sharding_key,
-      payload: payload
+      payload: payload,
+      mississippi_config: mississippi_config
     } do
       timestamp = DateTime.to_unix(DateTime.utc_now())
-      EventsProducer.publish(payload, sharding_key: sharding_key, timestamp: timestamp)
+
+      EventsProducer.publish(
+        payload,
+        [sharding_key: sharding_key, timestamp: timestamp],
+        mississippi_config
+      )
 
       assert_receive {^payload, _headers, ^timestamp}
     end
@@ -125,5 +137,32 @@ defmodule Mississippi.Integration.Producer.Test do
     E2EMessageHandler.start_with_receiver(self())
 
     :ok
+  end
+
+  defp event_producer_pids(total_count) do
+    last_index = total_count - 1
+
+    0..last_index
+    |> Enum.map(&{&1, event_producer_pid(&1)})
+  end
+
+  def event_producer_pid(queue_index, retries \\ 10) do
+    id = Worker.via_tuple(queue_index)
+
+    case {retries, GenServer.whereis(id)} do
+      {0, nil} ->
+        flunk("Event producer with index #{queue_index} did not start")
+
+      {n, nil} ->
+        Logger.info("Event producer with index #{queue_index}: start failed at retry #{n}")
+        Process.sleep(20)
+        event_producer_pid(queue_index, n - 1)
+
+      {_, pid} when is_pid(pid) ->
+        pid
+
+      {_, other} ->
+        flunk("Expected pid but got #{inspect(other)} for queue with index #{queue_index}")
+    end
   end
 end

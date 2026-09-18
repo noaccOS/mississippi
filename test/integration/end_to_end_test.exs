@@ -6,8 +6,6 @@ defmodule Mississippi.EndToEnd.Test do
 
   alias Mississippi.Producer.EventsProducer
 
-  require Logger
-
   @moduletag :integration
 
   setup_all do
@@ -16,11 +14,13 @@ defmodule Mississippi.EndToEnd.Test do
     prefix = "mississippi_test_#{System.unique_integer()}_"
     exchange_name = "mississippi_#{System.unique_integer([:positive])}"
 
+    mississippi_config = [
+      queues: [events_exchange_name: exchange_name, total_count: queue_count, prefix: prefix]
+    ]
+
     producer_options = [
       amqp_producer_options: [host: "localhost"],
-      mississippi_config: [
-        queues: [events_exchange_name: exchange_name, total_count: queue_count, prefix: prefix]
-      ]
+      mississippi_config: mississippi_config
     ]
 
     consumer_options = [
@@ -42,7 +42,8 @@ defmodule Mississippi.EndToEnd.Test do
 
     %{
       producer: producer,
-      consumer: consumer
+      consumer: consumer,
+      mississippi_config: mississippi_config
     }
   end
 
@@ -61,9 +62,10 @@ defmodule Mississippi.EndToEnd.Test do
   test "Message is published and received", %{
     sharding_key: sharding_key,
     payload: payload,
-    timestamp: timestamp
+    timestamp: timestamp,
+    mississippi_config: mississippi_config
   } do
-    EventsProducer.publish(payload, sharding_key: sharding_key)
+    EventsProducer.publish(payload, [sharding_key: sharding_key], mississippi_config)
 
     assert_receive {^payload, headers, ^timestamp}
     assert :erlang.binary_to_term(headers["sharding_key"]) == sharding_key
